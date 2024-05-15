@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/hex"
+	"errors"
 	"fmt"
 	"log/slog"
 	"os"
@@ -72,24 +73,20 @@ func (astmConn *ASTMConnection) ChangeStatus(status constants.LIS1A2ConnectionSt
 
 func (astmConn *ASTMConnection) WaitForACK() bool {
 	timerInterrupt := time.NewTimer(time.Second * 15)
-	retVal := false
 	select {
 	case resp := <-astmConn.ackChan:
 		slog.Debug("ACK/NAK received.", "Type", resp)
-		retVal = resp
+		if !timerInterrupt.Stop() {
+			slog.Debug("Draining the timer channel for WaitForACK.")
+			<-timerInterrupt.C
+			slog.Debug("Drained the timer channel for WaitForACK.")
+		}
+		slog.Debug("Stopped the timer.")
+		return resp
 	case <-timerInterrupt.C:
-		slog.Debug("Timer interrupt!")
-		retVal = false
+		slog.Debug("Timer interrupt for WaitForACK.")
+		return false
 	}
-
-	if !timerInterrupt.Stop() {
-		slog.Debug("Draining the timer channel for WaitForACK.")
-		<-timerInterrupt.C
-		slog.Debug("Drained the timer channel for WaitForACK.")
-	}
-	slog.Debug("Stopped the timer.")
-
-	return retVal
 }
 
 func (astmConn *ASTMConnection) StopSendMode() {
@@ -119,23 +116,23 @@ func (astmConn *ASTMConnection) EstablishSendMode() bool {
 	return true
 }
 
-// ReadMessage reads a single ASTM Message from the connection. It is a blocking call.
-func (astmConn *ASTMConnection) ReadMessage(timeout time.Duration) string {
+// ReadMessage reads a single ASTM Message from the connection.
+func (astmConn *ASTMConnection) ReadMessage(timeout time.Duration) (error, string) {
 	timerInterrupt := time.NewTimer(timeout)
-	newMessage := ""
 	select {
-	case newMessage = <-astmConn.incomingMessage:
+	case newMessage := <-astmConn.incomingMessage:
 		slog.Debug("New astm message arrived.")
-		break
+		if !timerInterrupt.Stop() {
+			slog.Debug("Draining timer channel for ReadMessage.")
+			<-timerInterrupt.C
+			slog.Debug("Drained timer channel for ReadMessage.")
+		}
+		slog.Debug("Stopped timer!")
+		return nil, newMessage
 	case <-timerInterrupt.C:
-		slog.Debug("Read message timer timed out!")
+		slog.Debug("Timer interrupt in ReadMessage.")
+		return errors.New("read message timer timed out"), ""
 	}
-	if !timerInterrupt.Stop() {
-		slog.Debug("Draining timer channel for ReadMessage.")
-		<-timerInterrupt.C
-		slog.Debug("Drained timer channel for ReadMessage.")
-	}
-	return newMessage
 }
 
 func (astmConn *ASTMConnection) SaveIncomingMessage(message string) {
