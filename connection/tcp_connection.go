@@ -84,7 +84,7 @@ func (tcpConn *TCPConnection) Write(data string) {
 // readFromTCPConnectionAndPostItOnReadChannel reads bytes from TCP Connection and posts it on the string channel
 func (tcpConn *TCPConnection) readFromTCPConnectionAndPostItOnReadChannel() {
 	go func(ctx context.Context) {
-		var buffer []byte
+		var buffer = make([]byte, 0)
 		var errorOccurred = false
 		var reader = bufio.NewReader(tcpConn.serverConn)
 		for {
@@ -101,6 +101,7 @@ func (tcpConn *TCPConnection) readFromTCPConnectionAndPostItOnReadChannel() {
 					// TODO: If connection is reset, then add a retry mechanism for reconnection
 					err := tcpConn.Disconnect()
 					if err != nil {
+						slog.Error("Connection was reset by peers. Error occurred while disconnecting.", "Error", err)
 						return
 					}
 				}
@@ -111,20 +112,25 @@ func (tcpConn *TCPConnection) readFromTCPConnectionAndPostItOnReadChannel() {
 			if bt == constants.NUL {
 				continue
 			}
-			buffer = append(buffer, bt)
 			if bt == constants.ENQ || bt == constants.ACK || bt == constants.NAK || bt == constants.EOT {
-				buffer = []byte{bt}
+				buffer = make([]byte, 0)
+				buffer = append(buffer, bt)
 				tcpConn.readChannelString <- string(buffer)
-				buffer = []byte{}
+				buffer = make([]byte, 0)
 			} else if bt == constants.STX {
 				// start of frame
-				buffer = []byte{bt}
+				buffer = make([]byte, 0)
+				buffer = append(buffer, bt)
 			} else if bt == constants.LF {
+				buffer = append(buffer, bt)
 				tcpConn.readChannelString <- string(buffer)
+			} else {
+				buffer = append(buffer, bt)
 			}
 
 			select {
 			case <-ctx.Done():
+				slog.Info("Ending readFromTCPConnectionAndPostItOnReadChannel Go routine.")
 				return
 			default:
 				continue
@@ -140,11 +146,13 @@ func (tcpConn *TCPConnection) writeToTCPConnectionFromChannel() {
 			count, err := (tcpConn.serverConn).Write([]byte{byteToBeSent})
 			if err != nil {
 				slog.Error("Failed to send byte over TCP.")
+				continue
 			}
 			slog.Debug("Byte sent successfully.", "Byte", byteToBeSent, "Count", count)
 
 			select {
 			case <-ctx.Done():
+				slog.Info("Ending writeToTCPConnectionFromChannel Go routine.")
 				return
 			default:
 				continue

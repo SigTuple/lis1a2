@@ -35,7 +35,7 @@ func NewASTMConnection(conn connection.Connection) *ASTMConnection {
 		status:                    constants.Idle,
 		incomingMessage:           make(chan string, 1),
 		ackChan:                   make(chan bool, 1),
-		buffer:                    []byte{},
+		buffer:                    make([]byte, 0),
 		recordBuffer:              "",
 		messageBuffer:             "",
 		frameNumber:               0,
@@ -94,6 +94,7 @@ func (astmConn *ASTMConnection) StopSendMode() {
 	(astmConn.connection).Write(data)
 	slog.Debug("Sending EOT.")
 	astmConn.status = constants.Idle
+	slog.Debug("Changed mode to Idle and stopped send mode.")
 }
 
 func (astmConn *ASTMConnection) EstablishSendMode() bool {
@@ -107,8 +108,8 @@ func (astmConn *ASTMConnection) EstablishSendMode() bool {
 	(astmConn.connection).Write(string([]byte{constants.ENQ}))
 	slog.Debug("Sent ENQ.")
 	if !astmConn.WaitForACK() {
+		slog.Error("Could not establish send mode.")
 		astmConn.StopSendMode()
-		slog.Error("Max number of send retires reached.")
 		return false
 	}
 	astmConn.status = constants.Sending
@@ -211,7 +212,7 @@ func (astmConn *ASTMConnection) CheckChecksum(frame string) bool {
 
 func (astmConn *ASTMConnection) sendString(frame string) {
 	if astmConn.status != constants.Sending {
-		slog.Error("Connection not in sending mode when trying to send data.")
+		slog.Error("Connection not in send mode when trying to send data.")
 		return
 	}
 	var byteArr []byte
@@ -304,7 +305,7 @@ func (astmConn *ASTMConnection) connectionDataReceived(data string) {
 					if singleByte == constants.LF {
 						receivedFrame := string(astmConn.buffer)
 						receivedFrameLen := len(receivedFrame)
-						astmConn.buffer = []byte{}
+						astmConn.buffer = make([]byte, 0)
 						if !astmConn.CheckChecksum(receivedFrame) {
 							slog.Error("Checksum did not match. Sending NAK.")
 							(astmConn.connection).Write(string([]byte{constants.NAK}))
@@ -362,6 +363,7 @@ func (astmConn *ASTMConnection) Listen() {
 		astmConn.connectionDataReceived(str)
 		select {
 		case <-astmConn.internalCtx.Done():
+			slog.Debug("Ceasing Listen operation on ASTM connection.")
 			return
 		default:
 			continue
