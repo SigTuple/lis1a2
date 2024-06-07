@@ -27,19 +27,38 @@ type ASTMConnection struct {
 	numberOfConnectionRetries int
 	internalCtx               context.Context
 	internalCtxCancelFunc     context.CancelFunc
+	saveIncomingMessage       bool
+	incomingMessageSaveDir    string
 }
 
-func NewASTMConnection(conn connection.Connection) *ASTMConnection {
-	return &ASTMConnection{
-		connection:                conn,
-		status:                    constants.Idle,
-		incomingMessage:           make(chan string, 1),
-		ackChan:                   make(chan bool, 1),
-		buffer:                    make([]byte, 0),
-		recordBuffer:              "",
-		messageBuffer:             "",
-		frameNumber:               0,
-		numberOfConnectionRetries: 0,
+func NewASTMConnection(conn connection.Connection, saveIncomingMessage bool, incomingMessageSaveDir ...string) *ASTMConnection {
+	if saveIncomingMessage && len(incomingMessageSaveDir) > 0 {
+		return &ASTMConnection{
+			connection:                conn,
+			status:                    constants.Idle,
+			incomingMessage:           make(chan string, 1),
+			ackChan:                   make(chan bool, 1),
+			buffer:                    make([]byte, 0),
+			recordBuffer:              "",
+			messageBuffer:             "",
+			frameNumber:               0,
+			numberOfConnectionRetries: 0,
+			saveIncomingMessage:       true,
+			incomingMessageSaveDir:    incomingMessageSaveDir[0],
+		}
+	} else {
+		return &ASTMConnection{
+			connection:                conn,
+			status:                    constants.Idle,
+			incomingMessage:           make(chan string, 1),
+			ackChan:                   make(chan bool, 1),
+			buffer:                    make([]byte, 0),
+			recordBuffer:              "",
+			messageBuffer:             "",
+			frameNumber:               0,
+			numberOfConnectionRetries: 0,
+			saveIncomingMessage:       false,
+		}
 	}
 }
 
@@ -136,10 +155,15 @@ func (astmConn *ASTMConnection) ReadMessage(timeout time.Duration) (error, strin
 	}
 }
 
-func (astmConn *ASTMConnection) SaveIncomingMessage(message string) {
+func (astmConn *ASTMConnection) SaveIncomingMessage(message string, fileDir string) {
 	currentTime := time.Now()
 	timeStamp := currentTime.Format("20060102150405")
-	filePath := fmt.Sprintf("temp/%v.txt", timeStamp)
+	var filePath string
+	if strings.HasSuffix(filePath, "/") {
+		filePath = fmt.Sprintf("%v%v.txt", fileDir, timeStamp)
+	} else {
+		filePath = fmt.Sprintf("%v/%v.txt", fileDir, timeStamp)
+	}
 
 	file, err := os.OpenFile(filePath, os.O_CREATE|os.O_APPEND|os.O_WRONLY, 0666)
 	defer func(file *os.File) {
@@ -327,7 +351,9 @@ func (astmConn *ASTMConnection) connectionDataReceived(data string) {
 					slog.Debug("Received EOT in Receiving state. Going to Idle state.")
 					if len(astmConn.messageBuffer) != 0 {
 						astmConn.incomingMessage <- astmConn.messageBuffer
-						astmConn.SaveIncomingMessage(astmConn.messageBuffer)
+						if astmConn.saveIncomingMessage {
+							astmConn.SaveIncomingMessage(astmConn.messageBuffer, astmConn.incomingMessageSaveDir)
+						}
 						astmConn.messageBuffer = ""
 					}
 					astmConn.status = constants.Idle
