@@ -3,6 +3,7 @@ package connection
 import (
 	"bufio"
 	"context"
+	"errors"
 	"fmt"
 	"log/slog"
 	"net"
@@ -16,6 +17,7 @@ import (
 // because their underlying data is passed by reference
 
 type TCPConnection struct {
+	isConnected       bool
 	serverConn        net.Conn
 	serverHost        string
 	serverPort        string
@@ -29,6 +31,7 @@ type TCPConnection struct {
 // NewTCPConnection creates a new TCP connection to the server provided
 func NewTCPConnection(serverHost string, serverPort string) TCPConnection {
 	return TCPConnection{
+		isConnected:       false,
 		serverHost:        serverHost,
 		serverPort:        serverPort,
 		readChannel:       make(chan byte, 64),
@@ -46,7 +49,13 @@ func (tcpConn *TCPConnection) Connect() error {
 	}
 	tcpConn.serverConn = conn
 	tcpConn.ctx, tcpConn.ctxCancelFunc = context.WithCancel(context.Background())
+	tcpConn.isConnected = true
 	return nil
+}
+
+// IsConnected gives connection status
+func (tcpConn *TCPConnection) IsConnected() bool {
+	return tcpConn.isConnected
 }
 
 // Listen listens to the incoming messages and writes outgoing messages to the connection
@@ -61,16 +70,21 @@ func (tcpConn *TCPConnection) Disconnect() error {
 	if err != nil {
 		return err
 	}
+	tcpConn.ctxCancelFunc()
 	close(tcpConn.readChannel)
 	close(tcpConn.writeChannel)
 	close(tcpConn.readChannelString)
-	tcpConn.ctxCancelFunc()
+	tcpConn.isConnected = false
 	return nil
 }
 
 // ReadStringFromConnection is a blocking call that reads from a channel
-func (tcpConn *TCPConnection) ReadStringFromConnection() string {
-	return <-tcpConn.readChannelString
+func (tcpConn *TCPConnection) ReadStringFromConnection() (string, error) {
+	str, ok := <-tcpConn.readChannelString
+	if !ok {
+		return "", errors.New("reading from a closed channel")
+	}
+	return str, nil
 }
 
 // Write writes the string data to the TCP connection
@@ -98,7 +112,6 @@ func (tcpConn *TCPConnection) readFromTCPConnectionAndPostItOnReadChannel() {
 					errorOccurred = false
 					continue
 				} else if strings.Contains(err.Error(), "connection reset by peer") {
-					// TODO: If connection is reset, then add a retry mechanism for reconnection
 					err := tcpConn.Disconnect()
 					if err != nil {
 						slog.Error("Connection was reset by peers. Error occurred while disconnecting.", "Error", err)

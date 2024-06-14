@@ -32,34 +32,24 @@ type ASTMConnection struct {
 }
 
 func NewASTMConnection(conn connection.Connection, saveIncomingMessage bool, incomingMessageSaveDir ...string) *ASTMConnection {
-	if saveIncomingMessage && len(incomingMessageSaveDir) > 0 {
-		return &ASTMConnection{
-			connection:                conn,
-			status:                    constants.Idle,
-			incomingMessage:           make(chan string, 1),
-			ackChan:                   make(chan bool, 1),
-			buffer:                    make([]byte, 0),
-			recordBuffer:              "",
-			messageBuffer:             "",
-			frameNumber:               0,
-			numberOfConnectionRetries: 0,
-			saveIncomingMessage:       true,
-			incomingMessageSaveDir:    incomingMessageSaveDir[0],
-		}
-	} else {
-		return &ASTMConnection{
-			connection:                conn,
-			status:                    constants.Idle,
-			incomingMessage:           make(chan string, 1),
-			ackChan:                   make(chan bool, 1),
-			buffer:                    make([]byte, 0),
-			recordBuffer:              "",
-			messageBuffer:             "",
-			frameNumber:               0,
-			numberOfConnectionRetries: 0,
-			saveIncomingMessage:       false,
-		}
+	astmConn := &ASTMConnection{
+		connection:                conn,
+		status:                    constants.Idle,
+		incomingMessage:           make(chan string, 1),
+		ackChan:                   make(chan bool, 1),
+		buffer:                    make([]byte, 0),
+		recordBuffer:              "",
+		messageBuffer:             "",
+		frameNumber:               0,
+		numberOfConnectionRetries: 0,
 	}
+	if saveIncomingMessage && len(incomingMessageSaveDir) > 0 {
+		astmConn.saveIncomingMessage = true
+		astmConn.incomingMessageSaveDir = incomingMessageSaveDir[0]
+	} else {
+		astmConn.saveIncomingMessage = false
+	}
+	return astmConn
 }
 
 // Connect runs connect method of underlying Connection object
@@ -77,6 +67,7 @@ func (astmConn *ASTMConnection) Connect() error {
 	return nil
 }
 
+// Disconnect runs the disconnect method of underlying Connection object and also closes channels
 func (astmConn *ASTMConnection) Disconnect() error {
 	close(astmConn.incomingMessage)
 	close(astmConn.ackChan)
@@ -86,6 +77,10 @@ func (astmConn *ASTMConnection) Disconnect() error {
 	return nil
 }
 
+func (astmConn *ASTMConnection) IsConnected() bool {
+	return astmConn.connection.IsConnected()
+}
+
 func (astmConn *ASTMConnection) ChangeStatus(status constants.LIS1A2ConnectionStatus) {
 	astmConn.status = status
 }
@@ -93,7 +88,11 @@ func (astmConn *ASTMConnection) ChangeStatus(status constants.LIS1A2ConnectionSt
 func (astmConn *ASTMConnection) WaitForACK() bool {
 	timerInterrupt := time.NewTimer(time.Second * 15)
 	select {
-	case resp := <-astmConn.ackChan:
+	case resp, ok := <-astmConn.ackChan:
+		if !ok {
+			slog.Error("Disconnected while waiting for ACK.")
+			return false
+		}
 		slog.Debug("ACK/NAK received.", "Type", resp)
 		if !timerInterrupt.Stop() {
 			slog.Debug("Draining the timer channel for WaitForACK.")
@@ -140,7 +139,10 @@ func (astmConn *ASTMConnection) EstablishSendMode() bool {
 func (astmConn *ASTMConnection) ReadMessage(timeout time.Duration) (error, string) {
 	timerInterrupt := time.NewTimer(timeout)
 	select {
-	case newMessage := <-astmConn.incomingMessage:
+	case newMessage, ok := <-astmConn.incomingMessage:
+		if !ok {
+			return errors.New("channel closed while reading"), ""
+		}
 		slog.Debug("New astm message arrived.")
 		if !timerInterrupt.Stop() {
 			slog.Debug("Draining timer channel for ReadMessage.")
@@ -385,7 +387,11 @@ func (astmConn *ASTMConnection) connectionDataReceived(data string) {
 func (astmConn *ASTMConnection) Listen() {
 	(astmConn.connection).Listen()
 	for {
-		str := (astmConn.connection).ReadStringFromConnection()
+		str, err := (astmConn.connection).ReadStringFromConnection()
+		if err != nil {
+			slog.Error("Stopped listening.", "Error", err)
+			return
+		}
 		astmConn.connectionDataReceived(str)
 		select {
 		case <-astmConn.internalCtx.Done():
