@@ -21,7 +21,6 @@ type TCPConnection struct {
 	serverConn        net.Conn
 	serverHost        string
 	serverPort        string
-	readChannel       chan byte
 	writeChannel      chan byte
 	readChannelString chan string
 	ctx               context.Context
@@ -31,12 +30,9 @@ type TCPConnection struct {
 // NewTCPConnection creates a new TCP connection to the server provided
 func NewTCPConnection(serverHost string, serverPort string) TCPConnection {
 	return TCPConnection{
-		isConnected:       false,
-		serverHost:        serverHost,
-		serverPort:        serverPort,
-		readChannel:       make(chan byte, 64),
-		writeChannel:      make(chan byte, 64),
-		readChannelString: make(chan string, 8),
+		isConnected: false,
+		serverHost:  serverHost,
+		serverPort:  serverPort,
 	}
 }
 
@@ -50,6 +46,8 @@ func (tcpConn *TCPConnection) Connect() error {
 	tcpConn.serverConn = conn
 	tcpConn.ctx, tcpConn.ctxCancelFunc = context.WithCancel(context.Background())
 	tcpConn.isConnected = true
+	tcpConn.writeChannel = make(chan byte, 64)
+	tcpConn.readChannelString = make(chan string, 8)
 	return nil
 }
 
@@ -71,7 +69,6 @@ func (tcpConn *TCPConnection) Disconnect() error {
 		return err
 	}
 	tcpConn.ctxCancelFunc()
-	close(tcpConn.readChannel)
 	close(tcpConn.writeChannel)
 	close(tcpConn.readChannelString)
 	tcpConn.isConnected = false
@@ -97,79 +94,68 @@ func (tcpConn *TCPConnection) Write(data string) {
 
 // readFromTCPConnectionAndPostItOnReadChannel reads bytes from TCP Connection and posts it on the string channel
 func (tcpConn *TCPConnection) readFromTCPConnectionAndPostItOnReadChannel() {
-	go func(ctx context.Context) {
-		var buffer = make([]byte, 0)
-		var errorOccurred = false
-		var reader = bufio.NewReader(tcpConn.serverConn)
-		for {
-			if errorOccurred {
-				errorOccurred = false
-				time.Sleep(time.Second * 1)
-			}
-			bt, err := reader.ReadByte()
-			if err != nil {
-				if err.Error() == "EOF" {
-					errorOccurred = false
-					continue
-				} else if strings.Contains(err.Error(), "connection reset by peer") {
-					err := tcpConn.Disconnect()
-					if err != nil {
-						slog.Error("Connection was reset by peers. Error occurred while disconnecting.", "Error", err)
-						return
-					}
-				}
-				errorOccurred = true
-				continue
-			}
-
-			if bt == constants.NUL {
-				continue
-			}
-			if bt == constants.ENQ || bt == constants.ACK || bt == constants.NAK || bt == constants.EOT {
-				buffer = make([]byte, 0)
-				buffer = append(buffer, bt)
-				tcpConn.readChannelString <- string(buffer)
-				buffer = make([]byte, 0)
-			} else if bt == constants.STX {
-				// start of frame
-				buffer = make([]byte, 0)
-				buffer = append(buffer, bt)
-			} else if bt == constants.LF {
-				buffer = append(buffer, bt)
-				tcpConn.readChannelString <- string(buffer)
-			} else {
-				buffer = append(buffer, bt)
-			}
-
-			select {
-			case <-ctx.Done():
-				slog.Info("Ending readFromTCPConnectionAndPostItOnReadChannel Go routine.")
-				return
-			default:
-				continue
-			}
+	var buffer = make([]byte, 0)
+	var errorOccurred = false
+	var reader = bufio.NewReader(tcpConn.serverConn)
+	for {
+		if errorOccurred {
+			errorOccurred = false
+			time.Sleep(time.Second * 1)
 		}
-	}(tcpConn.ctx)
+		bt, err := reader.ReadByte()
+		if err != nil {
+			if err.Error() == "EOF" {
+				errorOccurred = false
+				continue
+			} else if strings.Contains(err.Error(), "connection reset by peer") {
+				err := tcpConn.Disconnect()
+				if err != nil {
+					slog.Error("Connection was reset by peers. Error occurred while disconnecting.", "Error", err)
+					return
+				}
+			}
+			errorOccurred = true
+			continue
+		}
+
+		if bt == constants.NUL {
+			continue
+		}
+		if bt == constants.ENQ || bt == constants.ACK || bt == constants.NAK || bt == constants.EOT {
+			buffer = make([]byte, 0)
+			buffer = append(buffer, bt)
+			tcpConn.readChannelString <- string(buffer)
+			buffer = make([]byte, 0)
+		} else if bt == constants.STX {
+			// start of frame
+			buffer = make([]byte, 0)
+			buffer = append(buffer, bt)
+		} else if bt == constants.LF {
+			buffer = append(buffer, bt)
+			tcpConn.readChannelString <- string(buffer)
+		} else {
+			buffer = append(buffer, bt)
+		}
+
+		select {
+		case <-tcpConn.ctx.Done():
+			slog.Info("Ending readFromTCPConnectionAndPostItOnReadChannel Go routine.")
+			return
+		default:
+			continue
+		}
+	}
 }
 
 // writeToTCPConnectionFromChannel writes the data put on the write channel
 func (tcpConn *TCPConnection) writeToTCPConnectionFromChannel() {
-	go func(ctx context.Context) {
-		for byteToBeSent := range tcpConn.writeChannel {
-			count, err := (tcpConn.serverConn).Write([]byte{byteToBeSent})
-			if err != nil {
-				slog.Error("Failed to send byte over TCP.")
-				continue
-			}
-			slog.Debug("Byte sent successfully.", "Byte", byteToBeSent, "Count", count)
-
-			select {
-			case <-ctx.Done():
-				slog.Info("Ending writeToTCPConnectionFromChannel Go routine.")
-				return
-			default:
-				continue
-			}
+	for byteToBeSent := range tcpConn.writeChannel {
+		count, err := (tcpConn.serverConn).Write([]byte{byteToBeSent})
+		if err != nil {
+			slog.Error("Failed to send byte over TCP.")
+			continue
 		}
-	}(tcpConn.ctx)
+		slog.Debug("Byte sent successfully.", "Byte", byteToBeSent, "Count", count)
+	}
+	slog.Info("Ending writeToTCPConnectionFromChannel Go routine.")
 }
