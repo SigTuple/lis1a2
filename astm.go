@@ -35,8 +35,6 @@ func NewASTMConnection(conn connection.Connection, saveIncomingMessage bool, inc
 	astmConn := &ASTMConnection{
 		connection:                conn,
 		status:                    constants.Idle,
-		incomingMessage:           make(chan string, 1),
-		ackChan:                   make(chan bool, 1),
 		buffer:                    make([]byte, 0),
 		recordBuffer:              "",
 		messageBuffer:             "",
@@ -55,7 +53,6 @@ func NewASTMConnection(conn connection.Connection, saveIncomingMessage bool, inc
 // Connect runs connect method of underlying Connection object
 func (astmConn *ASTMConnection) Connect() error {
 	astmConn.numberOfConnectionRetries = 0
-	astmConn.internalCtx, astmConn.internalCtxCancelFunc = context.WithCancel(context.Background())
 	err := astmConn.connection.Connect()
 	for err != nil {
 		astmConn.numberOfConnectionRetries += 1
@@ -64,6 +61,9 @@ func (astmConn *ASTMConnection) Connect() error {
 		}
 		err = astmConn.connection.Connect()
 	}
+	astmConn.internalCtx, astmConn.internalCtxCancelFunc = context.WithCancel(context.Background())
+	astmConn.ackChan = make(chan bool, 1)
+	astmConn.incomingMessage = make(chan string, 1)
 	return nil
 }
 

@@ -64,14 +64,14 @@ func (tcpConn *TCPConnection) Listen() {
 
 // Disconnect disconnects form the tcp server and closes all internal channels and cancel all internal contexts
 func (tcpConn *TCPConnection) Disconnect() error {
-	err := (tcpConn.serverConn).Close()
-	if err != nil {
-		return err
-	}
 	tcpConn.ctxCancelFunc()
 	close(tcpConn.writeChannel)
 	close(tcpConn.readChannelString)
 	tcpConn.isConnected = false
+	err := (tcpConn.serverConn).Close()
+	if err != nil {
+		return err
+	}
 	return nil
 }
 
