@@ -114,6 +114,7 @@ func (tcpConn *TCPConnection) readFromTCPConnectionAndPostItOnReadChannel() {
 					return
 				}
 			}
+			slog.Error("Some error occurred while reading a byte.", "Error", err)
 			errorOccurred = true
 			continue
 		}
