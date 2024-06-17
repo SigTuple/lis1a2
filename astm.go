@@ -159,24 +159,26 @@ func (astmConn *ASTMConnection) ReadMessage(timeout time.Duration) (error, strin
 
 func (astmConn *ASTMConnection) SaveIncomingMessage(message string, fileDir string) {
 	currentTime := time.Now()
-	timeStamp := currentTime.Format("20060102150405")
+	timeStamp := currentTime.Format("2006-01-02-15-04-05")
 	var filePath string
-	if strings.HasSuffix(filePath, "/") {
+	if strings.HasSuffix(fileDir, "/") {
 		filePath = fmt.Sprintf("%v%v.txt", fileDir, timeStamp)
 	} else {
 		filePath = fmt.Sprintf("%v/%v.txt", fileDir, timeStamp)
 	}
 
 	file, err := os.OpenFile(filePath, os.O_CREATE|os.O_APPEND|os.O_WRONLY, 0666)
+	if err != nil {
+		slog.Error("Error while creating a file.", "Error", err)
+		return
+	}
+	slog.Debug("File created for query message.", "File", filePath)
 	defer func(file *os.File) {
 		err := file.Close()
 		if err != nil {
 			slog.Error("Error while closing file.", "Error", err)
 		}
 	}(file)
-	if err != nil {
-		slog.Error("Error while creating a file.", "Error", err)
-	}
 
 	formattedMessage := fmt.Sprintf("Timestamp: %v\n", timeStamp) +
 		fmt.Sprintf("Bytes Array: \n%v\n", []byte(message)) +
