@@ -356,7 +356,7 @@ func (astmConn *ASTMConnection) connectionDataReceived(data string) {
 					if len(astmConn.messageBuffer) != 0 {
 						astmConn.incomingMessage <- astmConn.messageBuffer
 						if astmConn.saveIncomingMessage {
-							astmConn.SaveIncomingMessage(astmConn.messageBuffer, astmConn.incomingMessageSaveDir)
+							go astmConn.SaveIncomingMessage(astmConn.messageBuffer, astmConn.incomingMessageSaveDir)
 						}
 						astmConn.messageBuffer = ""
 					}
