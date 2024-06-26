@@ -354,10 +354,10 @@ func (astmConn *ASTMConnection) connectionDataReceived(data string) {
 				} else {
 					slog.Debug("Received EOT in Receiving state. Going to Idle state.")
 					if len(astmConn.messageBuffer) != 0 {
-						astmConn.incomingMessage <- astmConn.messageBuffer
 						if astmConn.saveIncomingMessage {
 							go astmConn.SaveIncomingMessage(astmConn.messageBuffer, astmConn.incomingMessageSaveDir)
 						}
+						astmConn.incomingMessage <- astmConn.messageBuffer
 						astmConn.messageBuffer = ""
 					}
 					astmConn.status = constants.Idle
