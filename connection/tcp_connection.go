@@ -120,7 +120,7 @@ func (tcpConn *TCPConnection) readFromTCPConnectionAndPostItOnReadChannel() {
 					slog.Error("Stopped using closed network connection. Error occurred while disconnecting. ", "Error", err)
 					return
 				}
-				slog.Error("Stopped using closed network connection. Disconnected successfully.")
+				slog.Info("Stopped using closed network connection. Disconnected successfully.")
 				return
 			}
 			slog.Error("Some error occurred while reading a byte.", "Error", err)
