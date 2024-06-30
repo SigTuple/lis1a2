@@ -68,8 +68,7 @@ func (tcpConn *TCPConnection) Disconnect() error {
 	close(tcpConn.writeChannel)
 	close(tcpConn.readChannelString)
 	tcpConn.isConnected = false
-	err := (tcpConn.serverConn).Close()
-	if err != nil {
+	if err := (tcpConn.serverConn).Close(); err != nil {
 		return err
 	}
 	return nil
@@ -105,29 +104,32 @@ func (tcpConn *TCPConnection) readFromTCPConnectionAndPostItOnReadChannel() {
 		bt, err := reader.ReadByte()
 		if err != nil {
 			errorMessage := err.Error()
-			if errorMessage == "EOF" {
-				errorOccurred = false
-				continue
+			if strings.Contains(errorMessage, "EOF") {
+				if err := tcpConn.Disconnect(); err != nil {
+					slog.Error("End of file encountered! Error occurred while disconnecting.", "Error", err)
+					return
+				}
+				slog.Info("End of file encountered! Disconnected successfully.")
+				return
 			} else if strings.Contains(errorMessage, "connection reset by peer") {
-				err := tcpConn.Disconnect()
-				if err != nil {
+				if err := tcpConn.Disconnect(); err != nil {
 					slog.Error("Connection was reset by peers. Error occurred while disconnecting.", "Error", err)
 					return
 				}
 				slog.Info("Connection was reset by peers. Disconnected successfully.")
 				return
 			} else if strings.Contains(errorMessage, "use of closed network connection") {
-				err := tcpConn.Disconnect()
-				if err != nil {
+				if err := tcpConn.Disconnect(); err != nil {
 					slog.Error("Stopped using closed network connection. Error occurred while disconnecting. ", "Error", err)
 					return
 				}
 				slog.Info("Stopped using closed network connection. Disconnected successfully.")
 				return
+			} else {
+				slog.Error("Some error occurred while reading a byte.", "Error", err)
+				errorOccurred = true
+				continue
 			}
-			slog.Error("Some error occurred while reading a byte.", "Error", err)
-			errorOccurred = true
-			continue
 		}
 
 		if bt == constants.NUL {
