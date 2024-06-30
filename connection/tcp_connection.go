@@ -114,6 +114,8 @@ func (tcpConn *TCPConnection) readFromTCPConnectionAndPostItOnReadChannel() {
 					slog.Error("Connection was reset by peers. Error occurred while disconnecting.", "Error", err)
 					return
 				}
+				slog.Info("Connection was reset by peers. Disconnected successfully.")
+				return
 			} else if strings.Contains(errorMessage, "use of closed network connection") {
 				err := tcpConn.Disconnect()
 				if err != nil {
