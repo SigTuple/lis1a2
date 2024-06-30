@@ -104,15 +104,24 @@ func (tcpConn *TCPConnection) readFromTCPConnectionAndPostItOnReadChannel() {
 		}
 		bt, err := reader.ReadByte()
 		if err != nil {
-			if err.Error() == "EOF" {
+			errorMessage := err.Error()
+			if errorMessage == "EOF" {
 				errorOccurred = false
 				continue
-			} else if strings.Contains(err.Error(), "connection reset by peer") {
+			} else if strings.Contains(errorMessage, "connection reset by peer") {
 				err := tcpConn.Disconnect()
 				if err != nil {
 					slog.Error("Connection was reset by peers. Error occurred while disconnecting.", "Error", err)
 					return
 				}
+			} else if strings.Contains(errorMessage, "use of closed network connection") {
+				err := tcpConn.Disconnect()
+				if err != nil {
+					slog.Error("Stopped using closed network connection. Error occurred while disconnecting. ", "Error", err)
+					return
+				}
+				slog.Error("Stopped using closed network connection. Disconnected successfully.")
+				return
 			}
 			slog.Error("Some error occurred while reading a byte.", "Error", err)
 			errorOccurred = true
