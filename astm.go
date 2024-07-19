@@ -278,7 +278,7 @@ func (astmConn *ASTMConnection) sendEndFrame(frameNumber int, frame string) {
 func (astmConn *ASTMConnection) sendIntermediateFrame(frameNumber int, frame string) {
 	slog.Debug("Sending intermediate frame with ETB.")
 	var byteArr []byte
-	hexFrameNumber := string([]byte{byte(frameNumber)})[1:]
+	hexFrameNumber := hex.EncodeToString([]byte{byte(frameNumber)})[1:]
 	byteArr = append(byteArr, []byte(hexFrameNumber)...)
 	byteArr = append(byteArr, []byte(frame)...)
 	byteArr = append(byteArr, constants.ETB)
