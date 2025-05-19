@@ -135,12 +135,12 @@ func (astmConn *ASTMConnection) EstablishSendMode() bool {
 }
 
 // ReadMessage reads a single ASTM Message from the connection.
-func (astmConn *ASTMConnection) ReadMessage(timeout time.Duration) (error, string) {
+func (astmConn *ASTMConnection) ReadMessage(timeout time.Duration) (string, error) {
 	timerInterrupt := time.NewTimer(timeout)
 	select {
 	case newMessage, ok := <-astmConn.incomingMessage:
 		if !ok {
-			return errors.New("channel closed while reading"), ""
+			return "", errors.New("channel closed while reading")
 		}
 		slog.Debug("New astm message arrived.")
 		if !timerInterrupt.Stop() {
@@ -149,10 +149,10 @@ func (astmConn *ASTMConnection) ReadMessage(timeout time.Duration) (error, strin
 			slog.Debug("Drained timer channel for ReadMessage.")
 		}
 		slog.Debug("Stopped timer!")
-		return nil, newMessage
+		return newMessage, nil
 	case <-timerInterrupt.C:
 		slog.Debug("Timer interrupt in ReadMessage.")
-		return errors.New("read message timer timed out"), ""
+		return "", errors.New("read message timer timed out")
 	}
 }
 
@@ -260,38 +260,36 @@ func (astmConn *ASTMConnection) sendBytes(frame []byte) {
 	slog.Debug("Frame sent successfully.")
 }
 
-func (astmConn *ASTMConnection) sendEndFrame(frameNumber int, frame string) {
+func (astmConn *ASTMConnection) sendEndFrame(frameNumber int, frame []byte) {
 	slog.Debug("Sending ending frame with ETX.")
 	var byteArr []byte
 	hexFrameNumber := hex.EncodeToString([]byte{byte(frameNumber)})[1:]
 	byteArr = append(byteArr, []byte(hexFrameNumber)...)
-	byteArr = append(byteArr, []byte(frame)...)
+	byteArr = append(byteArr, frame...)
 	byteArr = append(byteArr, constants.CR)
 	byteArr = append(byteArr, constants.ETX)
 	astmConn.sendBytes(byteArr)
 }
 
-func (astmConn *ASTMConnection) sendIntermediateFrame(frameNumber int, frame string) {
+func (astmConn *ASTMConnection) sendIntermediateFrame(frameNumber int, frame []byte) {
 	slog.Debug("Sending intermediate frame with ETB.")
 	var byteArr []byte
 	hexFrameNumber := hex.EncodeToString([]byte{byte(frameNumber)})[1:]
 	byteArr = append(byteArr, []byte(hexFrameNumber)...)
-	byteArr = append(byteArr, []byte(frame)...)
+	byteArr = append(byteArr, frame...)
 	byteArr = append(byteArr, constants.ETB)
 	astmConn.sendBytes(byteArr)
 }
 
 // SendMessage takes single ASTM Record as input and sends it as one or more frames over the connection
-func (astmConn *ASTMConnection) SendMessage(message string) {
-	byteMessage := []byte(message)
-	for len(byteMessage) > constants.MaxFrameSize {
+func (astmConn *ASTMConnection) SendMessage(message []byte) {
+	for len(message) > constants.MaxFrameSize {
 		// divide it in chunks
-		intermediateFrame := string(byteMessage[:constants.MaxFrameSize])
-		astmConn.sendIntermediateFrame(astmConn.frameNumber, intermediateFrame)
+		astmConn.sendIntermediateFrame(astmConn.frameNumber, message[:constants.MaxFrameSize])
 		astmConn.frameNumber = (astmConn.frameNumber + 1) % 8
-		byteMessage = byteMessage[constants.MaxFrameSize:]
+		message = message[constants.MaxFrameSize:]
 	}
-	astmConn.sendEndFrame(astmConn.frameNumber, string(byteMessage))
+	astmConn.sendEndFrame(astmConn.frameNumber, message)
 	astmConn.frameNumber = (astmConn.frameNumber + 1) % 8
 }
 
