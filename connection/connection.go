@@ -4,7 +4,7 @@ type Connection interface {
 	Connect() error
 	IsConnected() bool
 	Listen()
-	Write(data string)
+	Write(data []byte)
 	ReadStringFromConnection() (string, error)
 	Disconnect() error
 }

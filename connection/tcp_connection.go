@@ -83,10 +83,9 @@ func (tcpConn *TCPConnection) ReadStringFromConnection() (string, error) {
 	return str, nil
 }
 
-// Write writes the string data to the TCP connection
-func (tcpConn *TCPConnection) Write(data string) {
-	dataBytes := []byte(data)
-	for _, dataByte := range dataBytes {
+// Write writes the bytes array to the TCP connection
+func (tcpConn *TCPConnection) Write(data []byte) {
+	for _, dataByte := range data {
 		tcpConn.writeChannel <- dataByte
 	}
 }
