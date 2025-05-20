@@ -84,7 +84,7 @@ func (astmConn *ASTMConnection) IsConnected() bool {
 
 // WaitForACK waits for acknowledgement and if it is not received within 15 seconds it returns false
 func (astmConn *ASTMConnection) WaitForACK() bool {
-	timerInterrupt := time.NewTimer(time.Second * 15)
+	timerInterrupt := time.NewTimer(time.Second * 10)
 	select {
 	case resp, ok := <-astmConn.ackChan:
 		if !ok {
@@ -115,7 +115,7 @@ func (astmConn *ASTMConnection) StopSendMode() {
 
 // EstablishSendMode sends an ENQ and waits for ACK/NAK
 func (astmConn *ASTMConnection) EstablishSendMode() bool {
-	astmConn.frameNumber = 1
+	astmConn.resetFrameNumber()
 	if astmConn.status != constants.Idle {
 		slog.Error("Connection not in idle when trying to establish send mode.")
 		return false
@@ -193,13 +193,14 @@ func (astmConn *ASTMConnection) saveIncomingMessage(message string, fileDir stri
 }
 
 func (astmConn *ASTMConnection) CalculateChecksum(frame []byte) []byte {
-	var sum = 0
+	var sum uint16 = 0
 	for _, bt := range frame {
-		sum = (sum + int(bt)) % 256
+		sum = (sum + uint16(bt)) % 256
 	}
 	calcChecksum := strings.ToUpper(hex.EncodeToString([]byte{byte(sum)}))
 	calcChecksumBytes := []byte(calcChecksum)
-	slog.Debug("Calculate Checksum.", "Checksum:", calcChecksum, "In bytes: ", calcChecksumBytes)
+	fmt.Println("Calculating Checksum.", "Sum", sum, "Checksum", calcChecksum, "In bytes", calcChecksumBytes)
+	slog.Debug("Calculating Checksum.", "Checksum", calcChecksum, "In bytes", calcChecksumBytes)
 	return calcChecksumBytes
 }
 
@@ -260,10 +261,19 @@ func (astmConn *ASTMConnection) sendBytes(frame []byte) {
 	slog.Debug("Frame sent successfully.")
 }
 
-func (astmConn *ASTMConnection) sendEndFrame(frameNumber int, frame []byte) {
+func (astmConn *ASTMConnection) resetFrameNumber() {
+	astmConn.frameNumber = 1
+}
+
+func (astmConn *ASTMConnection) incrementFrameNumber() {
+	astmConn.frameNumber = (astmConn.frameNumber + 1) % 8
+}
+
+func (astmConn *ASTMConnection) sendEndFrame(frame []byte) {
 	slog.Debug("Sending ending frame with ETX.")
 	var byteArr []byte
-	hexFrameNumber := hex.EncodeToString([]byte{byte(frameNumber)})[1:]
+	hexFrameNumber := hex.EncodeToString([]byte{byte(astmConn.frameNumber)})[1:]
+	astmConn.incrementFrameNumber()
 	byteArr = append(byteArr, []byte(hexFrameNumber)...)
 	byteArr = append(byteArr, frame...)
 	byteArr = append(byteArr, constants.CR)
@@ -271,10 +281,11 @@ func (astmConn *ASTMConnection) sendEndFrame(frameNumber int, frame []byte) {
 	astmConn.sendBytes(byteArr)
 }
 
-func (astmConn *ASTMConnection) sendIntermediateFrame(frameNumber int, frame []byte) {
+func (astmConn *ASTMConnection) sendIntermediateFrame(frame []byte) {
 	slog.Debug("Sending intermediate frame with ETB.")
 	var byteArr []byte
-	hexFrameNumber := hex.EncodeToString([]byte{byte(frameNumber)})[1:]
+	hexFrameNumber := hex.EncodeToString([]byte{byte(astmConn.frameNumber)})[1:]
+	astmConn.incrementFrameNumber()
 	byteArr = append(byteArr, []byte(hexFrameNumber)...)
 	byteArr = append(byteArr, frame...)
 	byteArr = append(byteArr, constants.ETB)
@@ -285,12 +296,10 @@ func (astmConn *ASTMConnection) sendIntermediateFrame(frameNumber int, frame []b
 func (astmConn *ASTMConnection) SendMessage(message []byte) {
 	for len(message) > constants.MaxFrameSize {
 		// divide it in chunks
-		astmConn.sendIntermediateFrame(astmConn.frameNumber, message[:constants.MaxFrameSize])
-		astmConn.frameNumber = (astmConn.frameNumber + 1) % 8
+		astmConn.sendIntermediateFrame(message[:constants.MaxFrameSize])
 		message = message[constants.MaxFrameSize:]
 	}
-	astmConn.sendEndFrame(astmConn.frameNumber, message)
-	astmConn.frameNumber = (astmConn.frameNumber + 1) % 8
+	astmConn.sendEndFrame(message)
 }
 
 func (astmConn *ASTMConnection) connectionDataReceived(data string) {
@@ -313,10 +322,10 @@ func (astmConn *ASTMConnection) connectionDataReceived(data string) {
 					// TODO: Change it back to idle if nothing is received even after 15 seconds have passed
 				}
 			case constants.Sending:
-				receivedACK := singleByte == constants.ACK
-				slog.Debug("Waiting for ACK in sending state.")
+				receivedACK := singleByte == constants.ACK || singleByte == constants.EOT
+				slog.Debug("Sending ACK state over channel.")
 				astmConn.ackChan <- receivedACK
-				slog.Debug("Received.", "ACK type", receivedACK)
+				slog.Debug("Received.", "ACK type", receivedACK, "ACK byte", singleByte)
 			case constants.Receiving:
 				if singleByte == constants.ENQ {
 					(astmConn.connection).Write([]byte{constants.NAK})
