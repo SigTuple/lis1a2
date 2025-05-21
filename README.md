@@ -5,16 +5,16 @@ so instead of using a TCP connection, the user can use any other standard for
 communication like RS232 provided it adheres to the `Connection` interface provided
 in the library.
 
+## Features
+
+- Adheres to LIS1A2 Standard
+- Implementation for TCP Connection adhering to `Connection` interface is provided.
+
 ## Installation
 
 ```bash
 go get github.com/therealriteshkudalkar/lis1a2
 ```
-
-## Features
-
-- Adheres to LIS1A2 Standard
-- Implementation for TCP Connection adhering to `Connection` interface is provided.
 
 ## Usage
 
