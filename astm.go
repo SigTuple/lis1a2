@@ -82,8 +82,8 @@ func (astmConn *ASTMConnection) IsConnected() bool {
 	return astmConn.connection.IsConnected()
 }
 
-// WaitForACK waits for acknowledgement and if it is not received within 15 seconds it returns false
-func (astmConn *ASTMConnection) WaitForACK() bool {
+// waitForACK waits for acknowledgement and if it is not received within 10 seconds it returns false
+func (astmConn *ASTMConnection) waitForACK() bool {
 	timerInterrupt := time.NewTimer(time.Second * 10)
 	select {
 	case resp, ok := <-astmConn.ackChan:
@@ -124,7 +124,7 @@ func (astmConn *ASTMConnection) EstablishSendMode() bool {
 	slog.Debug("Establishing send mode.")
 	(astmConn.connection).Write([]byte{constants.ENQ})
 	slog.Debug("Sent ENQ.")
-	if !astmConn.WaitForACK() {
+	if !astmConn.waitForACK() {
 		slog.Error("Could not establish send mode.")
 		astmConn.StopSendMode()
 		return false
@@ -192,6 +192,7 @@ func (astmConn *ASTMConnection) saveIncomingMessage(message string, fileDir stri
 	slog.Debug("Bytes written to file.", "Write count", writeCount)
 }
 
+// CalculateChecksum calculates the checksum of the given frame
 func (astmConn *ASTMConnection) CalculateChecksum(frame []byte) []byte {
 	var sum uint16 = 0
 	for _, bt := range frame {
@@ -215,7 +216,7 @@ func (astmConn *ASTMConnection) isFrameValid(frame []byte) bool {
 	return true
 }
 
-func (astmConn *ASTMConnection) IsTheFrameIntermediate(frame []byte) bool {
+func (astmConn *ASTMConnection) isTheFrameIntermediate(frame []byte) bool {
 	byteFrameLen := len(frame)
 	isIntermediate := frame[byteFrameLen-5] == constants.ETB
 	slog.Debug("Checking frame type.", "Is it intermediate", isIntermediate)
@@ -249,7 +250,7 @@ func (astmConn *ASTMConnection) sendBytes(frame []byte) {
 	byteArr = append(byteArr, constants.LF)
 	(astmConn.connection).Write(byteArr)
 	tryCounter := 0
-	for !astmConn.WaitForACK() {
+	for !astmConn.waitForACK() {
 		tryCounter++
 		if tryCounter > 5 {
 			astmConn.StopSendMode()
@@ -343,7 +344,7 @@ func (astmConn *ASTMConnection) connectionDataReceived(data string) {
 						} else {
 							slog.Debug("Checksum ok. Sending ACK.")
 							(astmConn.connection).Write([]byte{constants.ACK})
-							if astmConn.IsTheFrameIntermediate(receivedFrame) {
+							if astmConn.isTheFrameIntermediate(receivedFrame) {
 								partialRecord := receivedFrame[2 : receivedFrameLen-5]
 								astmConn.recordBuffer = append(astmConn.recordBuffer, partialRecord...)
 							} else {
