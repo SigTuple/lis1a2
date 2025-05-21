@@ -35,7 +35,7 @@ import (
 func main() {
 	var tcpConn = connection.NewTCPConnection("localhost", "4000")
 
-	var astmConn = lis1a2.NewASTMConnection(&tcpConn)
+	var astmConn = lis1a2.NewASTMConnection(&tcpConn, false)
 	err := astmConn.Connect()
 	if err != nil {
 		log.Fatalf("Failed to connect to the ASTM Service")
@@ -46,6 +46,27 @@ func main() {
 
 		}
 	}(astmConn)
+}
+```
+
+To send a new message to the astm connection the user needs to establish send mode
+
+```go
+package main
+
+import (
+	"log"
+	
+	"github.com/therealriteshkudalkar/lis1a2"
+)
+
+func SendMessageToConnection(astmConn lis1a2.ASTMConnection, data []byte) {
+	establishedSendMode := astmConn.EstablishSendMode()
+	if !establishedSendMode {
+		log.Fatal("Could not establish send mode.")
+	}
+	astmConn.SendMessage(data)
+	astmConn.StopSendMode()
 }
 ```
 
