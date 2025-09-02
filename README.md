@@ -13,7 +13,7 @@ in the library.
 ## Installation
 
 ```bash
-go get github.com/therealriteshkudalkar/lis1a2
+go get github.com/SigTuple/lis1a2
 ```
 
 ## Usage
@@ -28,8 +28,8 @@ package main
 import (
 	"log"
 
-	"github.com/therealriteshkudalkar/lis1a2"
-	"github.com/therealriteshkudalkar/lis1a2/connection"
+	"github.com/SigTuple/lis1a2"
+	"github.com/SigTuple/lis1a2/connection"
 )
 
 func main() {
@@ -57,7 +57,7 @@ package main
 import (
 	"log"
 	
-	"github.com/therealriteshkudalkar/lis1a2"
+	"github.com/SigTuple/lis1a2"
 )
 
 func SendMessageToConnection(astmConn lis1a2.ASTMConnection, data []byte) {

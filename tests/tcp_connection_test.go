@@ -4,8 +4,8 @@ import (
 	"log"
 	"testing"
 
-	"github.com/therealriteshkudalkar/lis1a2"
-	"github.com/therealriteshkudalkar/lis1a2/connection"
+	"github.com/SigTuple/lis1a2"
+	"github.com/SigTuple/lis1a2/connection"
 )
 
 func TestTCPConnectDisconnect(t *testing.T) {

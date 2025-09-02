@@ -10,7 +10,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/therealriteshkudalkar/lis1a2/constants"
+	"github.com/SigTuple/lis1a2/constants"
 )
 
 // NOTE: It's okay to copy the context object and the net.Conn object,
