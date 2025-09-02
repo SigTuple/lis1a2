@@ -11,8 +11,8 @@ import (
 	"strings"
 	"time"
 
-	"github.com/therealriteshkudalkar/lis1a2/connection"
-	"github.com/therealriteshkudalkar/lis1a2/constants"
+	"github.com/SigTuple/lis1a2/connection"
+	"github.com/SigTuple/lis1a2/constants"
 )
 
 type ASTMConnection struct {

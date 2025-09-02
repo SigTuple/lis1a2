@@ -6,7 +6,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/therealriteshkudalkar/lis1a2"
+	"github.com/SigTuple/lis1a2"
 )
 
 func TestCalculateChecksumOfASTMConnection(t *testing.T) {
